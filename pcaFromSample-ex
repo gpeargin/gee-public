@@ -1,0 +1,16 @@
+/**** Start of imports. If edited, may not auto-convert in the playground. ****/
+var naip = ee.ImageCollection("USDA/NAIP/DOQQ"),
+    imageVisParam = {"opacity":1,"bands":["pc1","pc2","pc3"],"min":-0.015,"max":0.015,"gamma":1},
+    geometry = 
+    /* color: #d63000 */
+    /* shown: false */
+    ee.Geometry.Polygon(
+        [[[-122.52767826211505, 37.954297005083056],
+          [-122.52767826211505, 37.69351110422231],
+          [-122.20220829141192, 37.69351110422231],
+          [-122.20220829141192, 37.954297005083056]]], null, false),
+    geometry2 = 
+    /* color: #0b4a8b */
+    /* shown: false */
+    ee.Geometry.Point([-122.40333798254662, 37.787925744102175]);
+/***** End of imports. If edited, may not auto-convert in the playground. *****/
