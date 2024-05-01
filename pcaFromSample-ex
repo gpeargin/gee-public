@@ -21,7 +21,7 @@ var naip = ee.ImageCollection("USDA/NAIP/DOQQ"),
     https://opensource.org/licenses/MIT.
 */
 
-var pcaFromSample = require('users/gregpeargin/public:pcaFromSample');
+var pcaFromSample = require('users/gregpeargin/gee-public:pcaFromSample');
 
 var images = naip
   .filterDate('2022-01-01', '2022-12-31')
