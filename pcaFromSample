@@ -1,0 +1,65 @@
+/*  Copyright 2024 Greg Peargin
+
+    Use of this source code is governed by an MIT-style
+    license that can be found in the LICENSE file or at
+    https://opensource.org/licenses/MIT.
+*/
+
+/*
+    Adapted in part from:
+    https://developers.google.com/earth-engine/guides/arrays_eigen_analysis
+    
+    'getNewBandNames' is from users/gena/packages:utils.PCA
+*/
+
+/*
+    This function transforms an image into its principal
+    components using only a sample of pixels instead of 
+    all of the pixels in a region. This speeds up PCA but
+    the bands of the resulting image won't be independent.
+
+    var 'image' does not need to be mean-centered.
+    
+    var 'sample' is obtained with ee.Image.sample()
+*/
+
+var pcaFromSample = function(image, sample) {
+  var getNewBandNames = function(img, prefix) {
+    var seq = ee.List.sequence(1, img.bandNames().length());
+      return seq.map(function(b) {
+        return ee.String(prefix).cat(ee.Number(b).int());
+      });
+  };
+  var sampleSize = sample.size();
+  var bands = image.bandNames();
+  var numBands = bands.size();
+  var sampleList = sample.toList(sampleSize).map(function(feature){
+    return ee.Feature(feature).toArray(bands);
+  });
+  var sampleMatrix = ee.Array.cat(sampleList, 1).transpose();
+  var onesVector = ee.Array(ee.List.repeat(1,sampleSize)).reshape([1,sampleSize]);
+  var sampleMeans  = onesVector.matrixMultiply(sampleMatrix).divide(sampleSize.subtract(1));
+  var sampleDeviationMatrix = sampleMatrix
+    .subtract(sampleMeans.repeat(0,sampleSize));
+  var sampleCovariance = sampleDeviationMatrix.transpose().matrixMultiply(sampleDeviationMatrix);
+  var sampleEigens = sampleCovariance.eigen();
+  var sampleEigenValues = sampleEigens.slice(1, 0, 1);
+  var sampleEigenVectors = sampleEigens.slice(1, 1);
+  var centeredImage =  ee.ImageCollection.fromImages(
+    ee.List.sequence(0, numBands.subtract(1)).map(function(i) {
+      return image.select(ee.Number(i).int())
+        .subtract(sampleMeans.project([1]).get([i]));
+    })).toBands();
+  var centeredArrayImage = centeredImage.toArray().toArray(1);
+  var eigenVectorImage = ee.Image(sampleEigenVectors);
+  var pcImage = eigenVectorImage.matrixMultiply(centeredArrayImage);
+  var sdImage = ee.Image(sampleEigenValues.sqrt())
+    .arrayProject([0])
+    .arrayFlatten([getNewBandNames(centeredImage, 'sd')]);
+  return pcImage
+    .arrayProject([0])
+    .arrayFlatten([getNewBandNames(centeredImage, 'pc')])
+    .divide(sdImage);
+};
+
+exports.pcaFromSample = pcaFromSample;
