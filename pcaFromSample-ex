@@ -14,3 +14,40 @@ var naip = ee.ImageCollection("USDA/NAIP/DOQQ"),
     /* shown: false */
     ee.Geometry.Point([-122.40333798254662, 37.787925744102175]);
 /***** End of imports. If edited, may not auto-convert in the playground. *****/
+/*  Copyright 2024 Greg Peargin
+
+    Use of this source code is governed by an MIT-style
+    license that can be found in the LICENSE file or at
+    https://opensource.org/licenses/MIT.
+*/
+
+var pcaFromSample = require('users/gregpeargin/public:pcaFromSample');
+
+var images = naip
+  .filterDate('2022-01-01', '2022-12-31')
+  .filterBounds(geometry);
+
+var projection = images.first().projection();
+
+var mosaic = images
+  .mosaic();
+
+print('Mosaicked images', images);
+print(
+  'Mosaic area (sq km)',
+  images
+    .geometry()
+    .area({maxError: 10, proj: projection.atScale(1000)})
+);
+
+var sample = mosaic.sample({
+  numPixels: 5000,
+  region: geometry,
+  projection: projection
+});
+
+var pca = pcaFromSample.pcaFromSample(mosaic, sample);
+
+Map.centerObject(geometry2, 15);
+Map.addLayer(mosaic, [], 'mosaic');
+Map.addLayer(pca, imageVisParam, 'pca');
