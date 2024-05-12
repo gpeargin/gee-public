@@ -1,5 +1,6 @@
-/*  Copyright 2024 Greg Peargin
-
+/*  
+    Copyright 2024 Greg Peargin
+    
     Use of this source code is governed by an MIT-style
     license that can be found in the LICENSE file or at
     https://opensource.org/licenses/MIT.
@@ -13,38 +14,107 @@
 */
 
 /*
-    This function transforms an image into its principal
+    'pcaFromSample' transforms an image into its principal
     components using only a sample of pixels instead of 
-    all of the pixels in a region. This speeds up PCA but
-    the bands of the resulting image won't be independent.
-
-    var 'image' does not need to be mean-centered.
+    all of the pixels in a region. This speeds up PCA, but
+    the bands of the resulting image will be slightly
+    correlated. 'pcaFromSample' performs mean-centering
+    internally, so images can be supplied as-is, along with
+    a dictionary of arguments to pass to ee.Image.sample().
     
-    var 'sample' is obtained with ee.Image.sample()
+    'pcaFromSample2' gives the user the option of performing
+    PCA in multiple steps in order to access intermediate
+    outputs. 'getSampleArrays' takes the same arguments as
+    'pcaFromSample' and produces a dictionary with keys
+    'meanVector' and 'covarianceMatrix', which are supplied
+    to 'getCenteredImage' and 'getSampleEigens', respectively.
+    The centered image and dictionary with keys 'eigenValues'
+    and 'eigenVectors' must then be provided to 'pcaFromSample2' 
+    to produce the transformed image.
+    
+    Finally, 'getSampleCorrelation' allows the user to estimate
+    the correlation between bands. Its only argument is the
+    covariance matrix obtained from 'getSampleArrays'.
 */
 
-var pcaFromSample = function(image, sample) {
+
+var getSampleArrays = function(image, Dict) {
+  var sample = image.sample(Dict);
+  var sampleSize = sample.size();
+  var numBands = sample
+    .first()
+    .toDictionary()
+    .keys()
+    .length();
+  var sampleList = sample
+    .toList(sampleSize)
+    .map(function(feature){
+      return ee.Feature(feature)
+        .toArray(sample.get('band_order'));
+    });
+  var sampleMatrix = ee.Array.cat(sampleList, 1)
+    .transpose();
+  var onesVector = ee.Array(ee.List.repeat(1,sampleSize))
+    .reshape([1,sampleSize]);
+  var sampleMeans  = onesVector
+    .matrixMultiply(sampleMatrix)
+    .divide(sampleSize.subtract(1));
+  var sampleDeviationMatrix = sampleMatrix
+    .subtract(sampleMeans.repeat(0,sampleSize));
+  var sampleCovarianceMatrix = sampleDeviationMatrix
+    .transpose()
+    .matrixMultiply(sampleDeviationMatrix);
+  return ee.Dictionary({
+    meanVector: sampleMeans,
+    covarianceMatrix: sampleCovarianceMatrix
+  });
+};
+
+var getSampleCorrelation = function(sampleCovMat) {
+  var D = sampleCovMat
+    .matrixDiagonal()
+    .sqrt()
+    .matrixToDiag();
+  var sampleCorrelationMatrix = D
+    .matrixInverse()
+    .matrixMultiply(sampleCovMat)
+    .matrixMultiply(D.matrixInverse());
+  return sampleCorrelationMatrix;
+};
+
+var getSampleEigens = function(sampleCovMat) {
+  var sampleEigens = sampleCovMat.eigen();
+  var sampleEigenValues = sampleEigens.slice(1, 0, 1);
+  var sampleEigenVectors = sampleEigens.slice(1, 1);
+  return ee.Dictionary({
+    eigenValues: sampleEigenValues,
+    eigenVectors: sampleEigenVectors
+  });
+};
+
+var getCenteredImage = function(image, sampleMeans) {
+  var numBands = image.bandNames().size();
+  return ee.ImageCollection.fromImages(
+    ee.List.sequence(0, numBands.subtract(1)).map(function(i) {
+      return image.select(ee.Number(i).int())
+        .subtract(sampleMeans.project([1]).get([i]));
+    })).toBands();
+};
+
+var pcaFromSample = function(image, Dict) {
   var getNewBandNames = function(img, prefix) {
     var seq = ee.List.sequence(1, img.bandNames().length());
       return seq.map(function(b) {
         return ee.String(prefix).cat(ee.Number(b).int());
       });
   };
-  var sampleSize = sample.size();
-  var bands = image.bandNames();
-  var numBands = bands.size();
-  var sampleList = sample.toList(sampleSize).map(function(feature){
-    return ee.Feature(feature).toArray(bands);
-  });
-  var sampleMatrix = ee.Array.cat(sampleList, 1).transpose();
-  var onesVector = ee.Array(ee.List.repeat(1,sampleSize)).reshape([1,sampleSize]);
-  var sampleMeans  = onesVector.matrixMultiply(sampleMatrix).divide(sampleSize.subtract(1));
-  var sampleDeviationMatrix = sampleMatrix
-    .subtract(sampleMeans.repeat(0,sampleSize));
-  var sampleCovariance = sampleDeviationMatrix.transpose().matrixMultiply(sampleDeviationMatrix);
-  var sampleEigens = sampleCovariance.eigen();
-  var sampleEigenValues = sampleEigens.slice(1, 0, 1);
-  var sampleEigenVectors = sampleEigens.slice(1, 1);
+  var numBands = image.bandNames().size();
+  var sampleArrays = getSampleArrays(image, Dict);
+  var sampleMeans = sampleArrays.getArray('meanVector');
+  var sampleCovariance = sampleArrays.getArray('covarianceMatrix');
+  var sampleEigens = getSampleEigens(sampleCovariance);
+  var sampleEigenValues = sampleEigens.getArray('eigenValues');
+  var sampleEigenVectors = sampleEigens.getArray('eigenVectors');
   var centeredImage =  ee.ImageCollection.fromImages(
     ee.List.sequence(0, numBands.subtract(1)).map(function(i) {
       return image.select(ee.Number(i).int())
@@ -62,4 +132,31 @@ var pcaFromSample = function(image, sample) {
     .divide(sdImage);
 };
 
+var pcaFromSample2 = function(centeredImage, sampleEigens) {
+  var getNewBandNames = function(img, prefix) {
+    var seq = ee.List.sequence(1, img.bandNames().length());
+      return seq.map(function(b) {
+        return ee.String(prefix).cat(ee.Number(b).int());
+      });
+  };
+  var numBands = centeredImage.bandNames().size();
+  var sampleEigenValues = sampleEigens.getArray('eigenValues');
+  var sampleEigenVectors = sampleEigens.getArray('eigenVectors');
+  var centeredArrayImage = centeredImage.toArray().toArray(1);
+  var eigenVectorImage = ee.Image(sampleEigenVectors);
+  var pcImage = eigenVectorImage.matrixMultiply(centeredArrayImage);
+  var sdImage = ee.Image(sampleEigenValues.sqrt())
+    .arrayProject([0])
+    .arrayFlatten([getNewBandNames(centeredImage, 'sd')]);
+  return pcImage
+    .arrayProject([0])
+    .arrayFlatten([getNewBandNames(centeredImage, 'pc')])
+    .divide(sdImage);
+};
+
+exports.getSampleArrays = getSampleArrays;
+exports.getSampleCorrelation = getSampleCorrelation;
+exports.getSampleEigens = getSampleEigens;
+exports.getCenteredImage = getCenteredImage;
 exports.pcaFromSample = pcaFromSample;
+exports.pcaFromSample2 = pcaFromSample2;
