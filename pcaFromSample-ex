@@ -11,7 +11,8 @@ var naip = ee.ImageCollection("USDA/NAIP/DOQQ"),
     geometry2 = 
     /* color: #0b4a8b */
     /* shown: false */
-    ee.Geometry.Point([-122.40333798254662, 37.787925744102175]);
+    ee.Geometry.Point([-122.35973599280052, 37.79579367864673]),
+    imageVisParam = {"opacity":1,"bands":["pc1","pc2","pc3"],"min":-0.03,"max":0.03,"gamma":1};
 /***** End of imports. If edited, may not auto-convert in the playground. *****/
 /*  
     Copyright 2024 Greg Peargin
@@ -20,8 +21,6 @@ var naip = ee.ImageCollection("USDA/NAIP/DOQQ"),
     license that can be found in the LICENSE file or at
     https://opensource.org/licenses/MIT.
 */
-
-var imageVisParam = {"opacity":1,"bands":["pc1","pc2","pc3"],"min":-0.025,"max":0.025,"gamma":1}
 
 var pfs = require('users/gregpeargin/gee-public:pcaFromSample');
 
