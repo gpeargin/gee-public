@@ -1,6 +1,5 @@
 /**** Start of imports. If edited, may not auto-convert in the playground. ****/
 var naip = ee.ImageCollection("USDA/NAIP/DOQQ"),
-    imageVisParam = {"opacity":1,"bands":["pc1","pc2","pc3"],"min":-0.015,"max":0.015,"gamma":1},
     geometry = 
     /* color: #d63000 */
     /* shown: false */
@@ -21,6 +20,8 @@ var naip = ee.ImageCollection("USDA/NAIP/DOQQ"),
     license that can be found in the LICENSE file or at
     https://opensource.org/licenses/MIT.
 */
+
+var imageVisParam = {"opacity":1,"bands":["pc1","pc2","pc3"],"min":-0.025,"max":0.025,"gamma":1}
 
 var pfs = require('users/gregpeargin/gee-public:pcaFromSample');
 
