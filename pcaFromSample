@@ -37,7 +37,6 @@
     covariance matrix obtained from 'getSampleArrays'.
 */
 
-
 var getSampleArrays = function(image, Dict) {
   var sample = image.sample(Dict);
   var sampleSize = sample.size();
