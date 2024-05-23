@@ -195,7 +195,11 @@ var pcaFromSample2 = function(centeredImage, sampleEigens) {
     .divide(sdImage);
 };
 
-exports.getSampleArrays = getSampleArrays;
+exports.getSampleMatrix = getSampleMatrix;
+exports.findOutliers = findOutliers;
+exports.maskOutliers = maskOutliers;
+exports.getSampleMean = getSampleMean;
+exports.getSampleCovariance = getSampleCovariance;
 exports.getSampleCorrelation = getSampleCorrelation;
 exports.getSampleEigens = getSampleEigens;
 exports.getCenteredImage = getCenteredImage;
