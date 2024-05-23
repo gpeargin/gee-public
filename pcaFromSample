@@ -62,14 +62,15 @@ var getSampleArrays = function(image, Dict) {
     .subtract(sampleMeans.repeat(0,sampleSize));
   var sampleCovarianceMatrix = sampleDeviationMatrix
     .transpose()
-    .matrixMultiply(sampleDeviationMatrix);
+    .matrixMultiply(sampleDeviationMatrix)
+    .divide(sample);
   return ee.Dictionary({
     meanVector: sampleMeans,
     covarianceMatrix: sampleCovarianceMatrix
   });
 };
 
-var getSampleCorrelation = function(sampleCovMat, sampleSize) {
+var getSampleCorrelation = function(sampleCovMat) {
   var D = sampleCovMat
     .matrixDiagonal()
     .sqrt()
@@ -77,8 +78,7 @@ var getSampleCorrelation = function(sampleCovMat, sampleSize) {
   var sampleCorrelationMatrix = D
     .matrixInverse()
     .matrixMultiply(sampleCovMat)
-    .matrixMultiply(D.matrixInverse())
-    .divide(sampleSize);
+    .matrixMultiply(D.matrixInverse());
   return sampleCorrelationMatrix;
 };
 
