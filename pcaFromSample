@@ -57,8 +57,8 @@ var getSampleMatrix = function(image, Dict) {
 };
 
 var findOutliers = function(sampleMatrix) {
-  var nRows = sampleMatrix.length().get([0])
-  var nCols = sampleMatrix.length().get([1])
+  var nRows = ee.Array(sampleMatrix).length().get([0])
+  var nCols = ee.Array(sampleMatrix).length().get([1])
   var sampleMatrixReshape = sampleMatrix.reshape([
     nRows, nCols, 1])
   var sampleQuartiles = sampleMatrixReshape.reduce(ee.Reducer.percentile([25, 75]), [0], 2)
@@ -89,7 +89,7 @@ var maskOutliers = function(image, limits) {
 }
 
 var getSampleMean = function(sampleMatrix) {
-  var sampleSize = sampleMatrix.length().get([0])
+  var sampleSize = ee.Array(sampleMatrix).length().get([0])
   var onesVector = ee.Array(ee.List.repeat(1,sampleSize))
     .reshape([1,sampleSize]);
   var sampleMean  = onesVector
@@ -99,7 +99,7 @@ var getSampleMean = function(sampleMatrix) {
 }
 
 var getSampleCovariance = function(sampleMatrix, sampleMean) {
-  var sampleSize = sampleMatrix.length().get([0])
+  var sampleSize = ee.Array(sampleMatrix).length().get([0])
   var sampleDeviation = sampleMatrix
     .subtract(sampleMean.repeat(0,sampleSize));
   var sampleCovariance = sampleDeviation
