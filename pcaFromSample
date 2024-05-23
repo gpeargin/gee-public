@@ -75,6 +75,19 @@ var findOutliers = function(sampleMatrix) {
   })
 }
 
+var maskOutliers = function(image, limits) {
+  var lteImage = ee.ImageCollection.fromImages(
+    ee.List.sequence(0, image.bandNames().size().subtract(1)).map(function(band) {
+    return image.select([band]).lte(limits.getArray('upper').get([band]))
+  })).toBands()
+  var gteImage = ee.ImageCollection.fromImages(
+    ee.List.sequence(0, image.bandNames().size().subtract(1)).map(function(band) {
+    return image.select([band]).gte(limits.getArray('lower').get([band]))
+  })).toBands()
+  var maskedImage = image.updateMask(lteImage.and(gteImage))
+  return maskedImage
+}
+
 var getSampleMean = function(sampleMatrix) {
   var sampleSize = sampleMatrix.length().get([0])
   var onesVector = ee.Array(ee.List.repeat(1,sampleSize))
