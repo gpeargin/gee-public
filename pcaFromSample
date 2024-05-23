@@ -53,12 +53,12 @@ var getSampleMatrix = function(image, Dict) {
     });
   var sampleMatrix = ee.Array.cat(sampleList, 1)
     .transpose();
-  return sampleMatrix  
+  return sampleMatrix
 };
 
 var findOutliers = function(sampleMatrix) {
-  var nRows = sampleMatrix.length().get([0])
-  var nCols = sampleMatrix.length().get([1])
+  var nRows = ee.Array(sampleMatrix).length().get([0])
+  var nCols = ee.Array(sampleMatrix).length().get([1])
   var sampleMatrixReshape = sampleMatrix.reshape([
     nRows, nCols, 1])
   var sampleQuartiles = sampleMatrixReshape.reduce(ee.Reducer.percentile([25, 75]), [0], 2)
