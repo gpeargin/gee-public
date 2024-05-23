@@ -37,7 +37,7 @@
     covariance matrix obtained from 'getSampleArrays'.
 */
 
-var getSampleArrays = function(image, Dict) {
+var getSampleMatrix = function(image, Dict) {
   var sample = image.sample(Dict);
   var sampleSize = sample.size();
   var numBands = sample
@@ -53,37 +53,43 @@ var getSampleArrays = function(image, Dict) {
     });
   var sampleMatrix = ee.Array.cat(sampleList, 1)
     .transpose();
-  var onesVector = ee.Array(ee.List.repeat(1,sampleSize))
-    .reshape([1,sampleSize]);
-  var sampleMeans  = onesVector
-    .matrixMultiply(sampleMatrix)
-    .divide(sampleSize);
-  var sampleDeviationMatrix = sampleMatrix
-    .subtract(sampleMeans.repeat(0,sampleSize));
-  var sampleCovarianceMatrix = sampleDeviationMatrix
-    .transpose()
-    .matrixMultiply(sampleDeviationMatrix)
-    .divide(sampleSize.subtract(1));
-  return ee.Dictionary({
-    meanVector: sampleMeans,
-    covarianceMatrix: sampleCovarianceMatrix
-  });
+  return sampleMatrix  
 };
 
-var getSampleCorrelation = function(sampleCovMat) {
-  var D = sampleCovMat
+var getSampleMean = function(sampleMatrix) {
+  var sampleSize = sampleMatrix.length().get([0])
+  var onesVector = ee.Array(ee.List.repeat(1,sampleSize))
+    .reshape([1,sampleSize]);
+  var sampleMean  = onesVector
+    .matrixMultiply(sampleMatrix)
+    .divide(sampleSize);
+  return sampleMean
+}
+
+var getSampleCovariance = function(sampleMatrix, sampleMean) {
+  var sampleSize = sampleMatrix.length().get([0])
+  var sampleDeviation = sampleMatrix
+    .subtract(sampleMean.repeat(0,sampleSize));
+  var sampleCovariance = sampleDeviation
+    .transpose()
+    .matrixMultiply(sampleDeviation)
+    .divide(sampleSize.subtract(1));
+}
+
+var getSampleCorrelation = function(sampleCovariance) {
+  var D = sampleCovariance
     .matrixDiagonal()
     .sqrt()
     .matrixToDiag();
-  var sampleCorrelationMatrix = D
+  var sampleCorrelation = D
     .matrixInverse()
-    .matrixMultiply(sampleCovMat)
+    .matrixMultiply(sampleCovariance)
     .matrixMultiply(D.matrixInverse());
-  return sampleCorrelationMatrix;
+  return sampleCorrelation;
 };
 
-var getSampleEigens = function(sampleCovMat) {
-  var sampleEigens = sampleCovMat.eigen();
+var getSampleEigens = function(sampleCovariance) {
+  var sampleEigens = sampleCovariance.eigen();
   var sampleEigenValues = sampleEigens.slice(1, 0, 1);
   var sampleEigenVectors = sampleEigens.slice(1, 1);
   return ee.Dictionary({
@@ -92,12 +98,12 @@ var getSampleEigens = function(sampleCovMat) {
   });
 };
 
-var getCenteredImage = function(image, sampleMeans) {
+var getCenteredImage = function(image, sampleMean) {
   var numBands = image.bandNames().size();
   return ee.ImageCollection.fromImages(
     ee.List.sequence(0, numBands.subtract(1)).map(function(i) {
       return image.select(ee.Number(i).int())
-        .subtract(sampleMeans.project([1]).get([i]));
+        .subtract(sampleMean.project([1]).get([i]));
     })).toBands();
 };
 
@@ -109,16 +115,16 @@ var pcaFromSample = function(image, Dict) {
       });
   };
   var numBands = image.bandNames().size();
-  var sampleArrays = getSampleArrays(image, Dict);
-  var sampleMeans = sampleArrays.getArray('meanVector');
-  var sampleCovariance = sampleArrays.getArray('covarianceMatrix');
+  var sampleMatrix = getSampleMatrix(image, Dict)
+  var sampleMean = getSampleMean(sampleMatrix);
+  var sampleCovariance = getSampleCovariance(sampleMatrix, sampleMean);
   var sampleEigens = getSampleEigens(sampleCovariance);
   var sampleEigenValues = sampleEigens.getArray('eigenValues');
   var sampleEigenVectors = sampleEigens.getArray('eigenVectors');
   var centeredImage =  ee.ImageCollection.fromImages(
     ee.List.sequence(0, numBands.subtract(1)).map(function(i) {
       return image.select(ee.Number(i).int())
-        .subtract(sampleMeans.project([1]).get([i]));
+        .subtract(sampleMean.project([1]).get([i]));
     })).toBands();
   var centeredArrayImage = centeredImage.toArray().toArray(1);
   var eigenVectorImage = ee.Image(sampleEigenVectors);
