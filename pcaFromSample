@@ -56,6 +56,25 @@ var getSampleMatrix = function(image, Dict) {
   return sampleMatrix  
 };
 
+var findOutliers = function(sampleMatrix) {
+  var nRows = sampleMatrix.length().get([0])
+  var nCols = sampleMatrix.length().get([1])
+  var sampleMatrixReshape = sampleMatrix.reshape([
+    nRows, nCols, 1])
+  var sampleQuartiles = sampleMatrixReshape.reduce(ee.Reducer.percentile([25, 75]), [0], 2)
+  var pc25 = sampleQuartiles.slice(2, 0, 1).project([1])
+  var pc75 = sampleQuartiles.slice(2, 1, 2).project([1])
+  var sampleIQR = pc75.subtract(pc25)
+  var upperLim = pc75.add(
+    ee.Array(1.5).repeat(0, sampleIQR.length().get([0])).multiply(sampleIQR))
+  var lowerLim = pc25.subtract(
+    ee.Array(1.5).repeat(0, sampleIQR.length().get([0])).multiply(sampleIQR))
+  return ee.Dictionary({
+    lower: lowerLim,
+    upper: upperLim
+  })
+}
+
 var getSampleMean = function(sampleMatrix) {
   var sampleSize = sampleMatrix.length().get([0])
   var onesVector = ee.Array(ee.List.repeat(1,sampleSize))
