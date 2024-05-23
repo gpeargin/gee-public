@@ -148,8 +148,11 @@ var pcaFromSample = function(image, Dict) {
   };
   var numBands = image.bandNames().size();
   var sampleMatrix = getSampleMatrix(image, Dict)
-  var sampleMean = getSampleMean(sampleMatrix);
-  var sampleCovariance = getSampleCovariance(sampleMatrix, sampleMean);
+  var outliers = findOutliers(sampleMatrix)
+  var maskedImage = maskOutliers(image, outliers)
+  var maskedSampleMatrix = getSampleMatrix(maskedImage, Dict)
+  var sampleMean = getSampleMean(maskedSampleMatrix);
+  var sampleCovariance = getSampleCovariance(maskedSampleMatrix, sampleMean);
   var sampleEigens = getSampleEigens(sampleCovariance);
   var sampleEigenValues = sampleEigens.getArray('eigenValues');
   var sampleEigenVectors = sampleEigens.getArray('eigenVectors');
