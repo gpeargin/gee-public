@@ -63,7 +63,7 @@ var getSampleArrays = function(image, Dict) {
   var sampleCovarianceMatrix = sampleDeviationMatrix
     .transpose()
     .matrixMultiply(sampleDeviationMatrix)
-    .divide(sample);
+    .divide(sampleSize);
   return ee.Dictionary({
     meanVector: sampleMeans,
     covarianceMatrix: sampleCovarianceMatrix
