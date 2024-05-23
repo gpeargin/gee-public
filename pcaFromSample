@@ -57,9 +57,9 @@ var getSampleMatrix = function(image, Dict) {
 };
 
 var findOutliers = function(sampleMatrix) {
-  var nRows = ee.Array(sampleMatrix).length().get([0])
-  var nCols = ee.Array(sampleMatrix).length().get([1])
-  var sampleMatrixReshape = ee.Array(sampleMatrix).reshape([
+  var nRows = sampleMatrix.length().get([0])
+  var nCols = sampleMatrix.length().get([1])
+  var sampleMatrixReshape = sampleMatrix.reshape([
     nRows, nCols, 1])
   var sampleQuartiles = sampleMatrixReshape.reduce(ee.Reducer.percentile([25, 75]), [0], 2)
   var pc25 = sampleQuartiles.slice(2, 0, 1).project([1])
@@ -106,6 +106,7 @@ var getSampleCovariance = function(sampleMatrix, sampleMean) {
     .transpose()
     .matrixMultiply(sampleDeviation)
     .divide(sampleSize.subtract(1));
+  return sampleCovariance
 }
 
 var getSampleCorrelation = function(sampleCovariance) {
