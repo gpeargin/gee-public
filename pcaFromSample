@@ -57,13 +57,13 @@ var getSampleArrays = function(image, Dict) {
     .reshape([1,sampleSize]);
   var sampleMeans  = onesVector
     .matrixMultiply(sampleMatrix)
-    .divide(sampleSize.subtract(1));
+    .divide(sampleSize);
   var sampleDeviationMatrix = sampleMatrix
     .subtract(sampleMeans.repeat(0,sampleSize));
   var sampleCovarianceMatrix = sampleDeviationMatrix
     .transpose()
     .matrixMultiply(sampleDeviationMatrix)
-    .divide(sampleSize);
+    .divide(sampleSize.subtract(1));
   return ee.Dictionary({
     meanVector: sampleMeans,
     covarianceMatrix: sampleCovarianceMatrix
