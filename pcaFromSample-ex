@@ -11,8 +11,7 @@ var naip = ee.ImageCollection("USDA/NAIP/DOQQ"),
     geometry2 = 
     /* color: #0b4a8b */
     /* shown: false */
-    ee.Geometry.Point([-122.35973599280052, 37.79579367864673]),
-    imageVisParam = {"opacity":1,"bands":["pc1","pc2","pc3"],"min":-0.03,"max":0.03,"gamma":1};
+    ee.Geometry.Point([-122.35973599280052, 37.79579367864673]);
 /***** End of imports. If edited, may not auto-convert in the playground. *****/
 /*  
     Copyright 2024 Greg Peargin
@@ -22,68 +21,30 @@ var naip = ee.ImageCollection("USDA/NAIP/DOQQ"),
     https://opensource.org/licenses/MIT.
 */
 
-var pfs = require('users/gregpeargin/gee-public:pcaFromSample');
+var ss = require('users/gregpeargin/gee-public:sampleStatistics');
 
 var images = naip
   .filterDate('2022-01-01', '2022-12-31')
   .filterBounds(geometry);
 
 var projection = images.first().projection();
-
+var geom = images.geometry().bounds(1, projection);
 var mosaic = images
   .mosaic();
 
-print('Mosaicked images', images);
-
-print('Mosaic area (sqkm)',
-  images.geometry().area({maxError: 10, proj: projection.atScale(1000)})
-);
-
 var dict = {
   numPixels: 1000,
-  region: geometry,
+  region: geom,
   projection: projection
 };
 
-// Use 'pcaFromSample' to perform PCA with a single function:
-var pca = pfs.pcaFromSample(mosaic, dict);
+// Use 'getSampleStats'
+var sampleStats = ss.getSampleStats(mosaic, dict)
+print('Sample statistics', sampleStats)
 
-// Use 'pcaFromSample2' to access intermediate outputs:
-var sampleArrays = pfs.getSampleArrays(mosaic, dict);
-
-var sampleMeans = sampleArrays.getArray('meanVector');
-
-var sampleCovariance = sampleArrays.getArray('covarianceMatrix');
-
-var sampleEigens = pfs.getSampleEigens(sampleCovariance);
-
-var eigenVals = sampleEigens.getArray('eigenValues').project([0]);
-
-print('Proportion of total variance explained by principal components',
-  eigenVals.divide(
-    ee.Array(eigenVals.reduce(ee.Reducer.sum(), [0]).get([0]))
-    .repeat(0, eigenVals.length().get([0]))));
-    
-var centeredImage = pfs.getCenteredImage(mosaic, sampleMeans);
-
-var pca2 = pfs.pcaFromSample2(centeredImage, sampleEigens);
-
-var mosaicSampleCorrelation = pfs.getSampleCorrelation(sampleCovariance);
-
-var pcaSampleArrays = pfs.getSampleArrays(pca2, dict);
-
-var pcaSampleCovariance = pcaSampleArrays.getArray('covarianceMatrix');
-
-var pcaSampleCorrelation = pfs.getSampleCorrelation(pcaSampleCovariance);
-
-print('Correlation before PCA', mosaicSampleCorrelation);
-
-print('Correlation after PCA', pcaSampleCorrelation);
+// Use 'pcaFromSample' to perform PCA
+var pca = ss.pcaFromSample(mosaic, sampleStats);
 
 Map.centerObject(geometry2, 13);
-
 Map.addLayer(mosaic, [], 'mosaic');
-
-Map.addLayer(pca, imageVisParam, 'pca');
-
-Map.addLayer(pca2, imageVisParam, 'pca2');
+Map.addLayer(pca, {min: -3, max: 3}, 'pca');
