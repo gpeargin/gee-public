@@ -1,0 +1,194 @@
+/*  
+    Copyright 2024 Greg Peargin
+    
+    Use of this source code is governed by an MIT-style
+    license that can be found in the LICENSE file or at
+    https://opensource.org/licenses/MIT.
+*/
+
+/*
+    Adapted in part from:
+    
+    https://developers.google.com/earth-engine/guides/arrays_eigen_analysis
+    
+    and:
+    
+    users/gena/packages:utils.PCA
+*/
+
+var getSampleArray = function(image, Dict) {
+  var sample = image.sample(Dict);
+  var sampleSize = sample.size();
+  var numBands = sample
+    .first()
+    .toDictionary()
+    .keys()
+    .length();
+  var sampleList = sample
+    .toList(sampleSize)
+    .map(function(feature){
+      return ee.Feature(feature)
+        .toArray(sample.get('band_order'));
+    });
+  var SampleArray = ee.Array.cat(sampleList, 1)
+    .transpose();
+  return SampleArray
+};
+
+var detectOutliers = function(SampleArray) {
+  var nRows = ee.Array(SampleArray).length().get([0])
+  var nCols = ee.Array(SampleArray).length().get([1])
+  var SampleArrayReshape = ee.Array(SampleArray).reshape([
+    nRows, nCols, 1])
+  var sampleQuartiles = SampleArrayReshape.reduce(ee.Reducer.percentile([25, 75]), [0], 2)
+  var pc25 = sampleQuartiles.slice(2, 0, 1).project([1])
+  var pc75 = sampleQuartiles.slice(2, 1, 2).project([1])
+  var sampleIQR = pc75.subtract(pc25)
+  var upperLim = pc75.add(
+    ee.Array(1.5).repeat(0, sampleIQR.length().get([0])).multiply(sampleIQR))
+  var lowerLim = pc25.subtract(
+    ee.Array(1.5).repeat(0, sampleIQR.length().get([0])).multiply(sampleIQR))
+  return ee.Dictionary({
+    lower: lowerLim,
+    upper: upperLim
+  })
+}
+
+var removeOutliers = function(image, limits) {
+  var lteImage = ee.ImageCollection.fromImages(
+    ee.List.sequence(0, image.bandNames().size().subtract(1)).map(function(band) {
+    return image.select([band]).lte(limits.getArray('upper').get([band]))
+  })).toBands()
+  var gteImage = ee.ImageCollection.fromImages(
+    ee.List.sequence(0, image.bandNames().size().subtract(1)).map(function(band) {
+    return image.select([band]).gte(limits.getArray('lower').get([band]))
+  })).toBands()
+  var maskedImage = image.updateMask(lteImage.and(gteImage))
+  return maskedImage
+}
+
+var computeMean = function(SampleArray) {
+  var sampleSize = ee.Array(SampleArray).length().get([0])
+  var onesVector = ee.Array(ee.List.repeat(1,sampleSize))
+    .reshape([1,sampleSize]);
+  var sampleMean  = onesVector
+    .matrixMultiply(SampleArray)
+    .divide(sampleSize);
+  return sampleMean
+}
+
+var computeCovariance = function(SampleArray, sampleMean) {
+  var sampleSize = ee.Array(SampleArray).length().get([0])
+  var sampleDeviation = SampleArray
+    .subtract(sampleMean.repeat(0,sampleSize));
+  var sampleCovariance = sampleDeviation
+    .transpose()
+    .matrixMultiply(sampleDeviation)
+    .divide(sampleSize.subtract(1));
+  return sampleCovariance
+}
+
+var computeCorrelation = function(sampleCovariance) {
+  var D = sampleCovariance
+    .matrixDiagonal()
+    .sqrt()
+    .matrixToDiag();
+  var sampleCorrelation = D
+    .matrixInverse()
+    .matrixMultiply(sampleCovariance)
+    .matrixMultiply(D.matrixInverse());
+  return sampleCorrelation;
+};
+
+var computeEigens = function(sampleCovariance) {
+  var sampleEigens = sampleCovariance.eigen();
+  var sampleEigenValues = sampleEigens.slice(1, 0, 1);
+  var sampleEigenVectors = sampleEigens.slice(1, 1);
+  return ee.Dictionary({
+    eigenValues: sampleEigenValues,
+    eigenVectors: sampleEigenVectors
+  });
+};
+
+var computeFivenum = function(SampleArray) {
+  return SampleArray.reshape(
+    [SampleArray.length().get([0]), SampleArray.length().get([1]), -1])
+    .reduce(ee.Reducer.percentile([0,25,50,75,100]), [0], 2)
+    .project([1,2])
+}
+
+var getSampleStats = function(image, Dict) {
+  var mat = getSampleArray(image, Dict)
+  var outs = detectOutliers(mat)
+  var cleaned = removeOutliers(image, outs)
+  var mat2 = getSampleArray(cleaned, Dict)
+  var avg = computeMean(mat2)
+  var cov = computeCovariance(mat2, avg)
+  var corr = computeCorrelation(cov)
+  var eigs = computeEigens(cov)
+  var fiveNums = computeFivenum(mat2).transpose()
+  return ee.Dictionary({
+    numObs: mat2.length().get([0]),
+    Q0: fiveNums.slice(0, 0, 1).project([1]),
+    Q1: fiveNums.slice(0, 1, 2).project([1]),
+    Q2: fiveNums.slice(0, 2, 3).project([1]),
+    Q3: fiveNums.slice(0, 3, 4).project([1]),
+    Q4: fiveNums.slice(0, 4, 5).project([1]),
+    mean: avg.project([1]),
+    sd: cov.matrixDiagonal().sqrt(),
+    cov: cov,
+    corr: corr,
+    eigVals: eigs.getArray('eigenValues').project([0]),
+    eigVects: eigs.getArray('eigenVectors')
+  })
+}
+
+var centerImage = function(image, sampleMean) {
+  var numBands = image.bandNames().size();
+  return ee.ImageCollection.fromImages(
+    ee.List.sequence(0, numBands.subtract(1)).map(function(i) {
+      return image.select(ee.Number(i).int())
+        .subtract(sampleMean.project([1]).get([i]));
+    })).toBands();
+};
+
+var pcaFromSample = function(image, stats) {
+  var getNewBandNames = function(img, prefix) {
+    var seq = ee.List.sequence(1, img.bandNames().length());
+      return seq.map(function(b) {
+        return ee.String(prefix).cat(ee.Number(b).int());
+      });
+  };
+  var numBands = image.bandNames().size();
+  var sampleMean = stats.getArray('mean');
+  var sampleCovariance = stats.getArray('cov');
+  var sampleEigenValues = stats.getArray('eigVals');
+  var sampleEigenVectors = stats.getArray('eigVects');
+  var centeredImage =  ee.ImageCollection.fromImages(
+    ee.List.sequence(0, numBands.subtract(1)).map(function(i) {
+      return image.select(ee.Number(i).int())
+        .subtract(sampleMean.get([i]));
+    })).toBands();
+  var centeredArrayImage = centeredImage.toArray().toArray(1);
+  var eigenVectorImage = ee.Image(sampleEigenVectors);
+  var pcImage = eigenVectorImage.matrixMultiply(centeredArrayImage);
+  var sdImage = ee.Image(sampleEigenValues.sqrt())
+    .arrayProject([0])
+    .arrayFlatten([getNewBandNames(centeredImage, 'sd')]);
+  return pcImage
+    .arrayProject([0])
+    .arrayFlatten([getNewBandNames(centeredImage, 'pc')])
+    .divide(sdImage);
+};
+
+exports.getSampleArray = getSampleArray;
+exports.detectOutliers = detectOutliers;
+exports.removeOutliers = removeOutliers;
+exports.computeMean = computeMean;
+exports.computeCovariance = computeCovariance;
+exports.computeCorrelation = computeCorrelation;
+exports.computeEigens = computeEigens;
+exports.computeFivenum = computeFivenum;
+exports.getSampleStats = getSampleStats;
+exports.centerImage = centerImage;
+exports.pcaFromSample = pcaFromSample;

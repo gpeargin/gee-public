@@ -1,0 +1,50 @@
+/**** Start of imports. If edited, may not auto-convert in the playground. ****/
+var naip = ee.ImageCollection("USDA/NAIP/DOQQ"),
+    geometry = 
+    /* color: #d63000 */
+    /* shown: false */
+    ee.Geometry.Polygon(
+        [[[-122.52767826211505, 37.954297005083056],
+          [-122.52767826211505, 37.69351110422231],
+          [-122.20220829141192, 37.69351110422231],
+          [-122.20220829141192, 37.954297005083056]]], null, false),
+    geometry2 = 
+    /* color: #0b4a8b */
+    /* shown: false */
+    ee.Geometry.Point([-122.35973599280052, 37.79579367864673]);
+/***** End of imports. If edited, may not auto-convert in the playground. *****/
+/*  
+    Copyright 2024 Greg Peargin
+    
+    Use of this source code is governed by an MIT-style
+    license that can be found in the LICENSE file or at
+    https://opensource.org/licenses/MIT.
+*/
+
+var ss = require('users/gregpeargin/gee-public:sampleStatistics');
+
+var images = naip
+  .filterDate('2022-01-01', '2022-12-31')
+  .filterBounds(geometry);
+
+var projection = images.first().projection();
+var geom = images.geometry().bounds(1, projection);
+var mosaic = images
+  .mosaic();
+
+var dict = {
+  numPixels: 1000,
+  region: geom,
+  projection: projection
+};
+
+// Use 'getSampleStats'
+var sampleStats = ss.getSampleStats(mosaic, dict)
+print('Sample statistics', sampleStats)
+
+// Use 'pcaFromSample' to perform PCA
+var pca = ss.pcaFromSample(mosaic, sampleStats);
+
+Map.centerObject(geometry2, 13);
+Map.addLayer(mosaic, [], 'mosaic');
+Map.addLayer(pca, {min: -3, max: 3}, 'pca');
